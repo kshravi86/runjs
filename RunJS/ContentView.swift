@@ -5,33 +5,57 @@ struct ContentView: View {
     @State private var codeInput: String = "console.log('Hello, Run JS!');\n1 + 1;"
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Code Input Area
-            TextEditor(text: $codeInput)
-                .font(.system(.body, design: .monospaced))
-                .frame(height: 200)
-                .border(Color.gray)
-                .padding([.horizontal, .top])
-
-            // Run Button
-            Button("Run Code") {
-                engine.execute(code: codeInput)
-            }
-            .padding()
-            .buttonStyle(.borderedProminent)
-
-            // Output Area
-            ScrollView {
-                Text(engine.output)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+        NavigationStack {
+            VStack(spacing: 0) {
+                // MARK: - Code Input Area
+                TextEditor(text: $codeInput)
                     .font(.system(.body, design: .monospaced))
-                    .padding()
+                    .scrollContentBackground(.hidden) // Hide default background
+                    .background(Color(.secondarySystemBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .padding([.horizontal, .top])
+                    .frame(maxHeight: .infinity)
+                
+                Divider()
+                
+                // MARK: - Output Console Area
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Console Output")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal)
+                    
+                    ScrollView {
+                        Text(engine.output)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .font(.system(.body, design: .monospaced))
+                            .padding(8)
+                            .textSelection(.enabled)
+                    }
+                    .frame(maxHeight: .infinity)
                     .background(Color.black.opacity(0.05))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .padding([.horizontal, .bottom])
+                }
+                .frame(height: 200) // Fixed height for console
             }
-            .border(Color.gray)
-            .padding([.horizontal, .bottom])
+            .navigationTitle("Run JS Interpreter")
+            .toolbar {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button("Clear") {
+                        codeInput = ""
+                        engine.output = ""
+                    }
+                    
+                    Button {
+                        engine.execute(code: codeInput)
+                    } label: {
+                        Label("Run", systemImage: "play.fill")
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
         }
-        .navigationTitle("Run JS Interpreter")
     }
 }
 

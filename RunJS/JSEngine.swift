@@ -14,7 +14,7 @@ class JSEngine: ObservableObject {
         // Create a custom 'console' object in the JS context
         let consoleLog: @convention(block) (String) -> Void = { [weak self] message in
             DispatchQueue.main.async {
-                self?.output += message + "\n"
+                self?.output += "[LOG] " + message + "\n"
             }
         }
         

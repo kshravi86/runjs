@@ -88,8 +88,8 @@
 			);
 			dependencies = (
 			);
-			name = Run JS;
-			productName = Run JS;
+			name = "Run JS";
+			productName = "Run JS";
 			productReference = 7A8B9C1D2E3F4567890ABCF2 /* NotesApp.app */;
 			productType = "com.apple.product-type.application";
 		};
