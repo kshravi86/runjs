@@ -69,7 +69,8 @@ jobs:
           BUNDLE_ID=${APPID#*.}
           echo "PP_UUID=$PP_UUID" >> $GITHUB_ENV
           echo "PP_NAME=$PP_NAME" >> $GITHUB_ENV
-          echo "BUNDLE_ID=$BUNDLE_ID" >> $GITHUB_ENV
+          # Preserve the bundle id coming from the provisioning profile as PP_BUNDLE_ID
+          echo "PP_BUNDLE_ID=$BUNDLE_ID" >> $GITHUB_ENV
           echo "Using provisioning profile: $PP_NAME ($PP_UUID) for $BUNDLE_ID"
 
       - name: Detect bundle identifier
@@ -90,8 +91,9 @@ jobs:
             echo "::error title=Bundle id missing::Could not determine PRODUCT_BUNDLE_IDENTIFIER"
             exit 1
           fi
-          echo "BUNDLE_ID=$BUNDLE_ID" >> "$GITHUB_ENV"
-          echo "Bundle identifier detected: $BUNDLE_ID"
+          # Do not overwrite the provisioning profile bundle id; store detected one separately
+          echo "PROJECT_BUNDLE_ID=$BUNDLE_ID" >> "$GITHUB_ENV"
+          echo "Bundle identifier detected from project: $BUNDLE_ID"
 
       - name: Resolve Swift packages
         run: |
@@ -112,6 +114,7 @@ jobs:
             DEVELOPMENT_TEAM="$IOS_TEAM_ID" \
             CODE_SIGN_IDENTITY="Apple Distribution" \
             PROVISIONING_PROFILE_SPECIFIER="$PROFILE_SPECIFIER" \
+            PRODUCT_BUNDLE_IDENTIFIER="${PP_BUNDLE_ID:-$PROJECT_BUNDLE_ID}" \
             2>&1 | tee $GITHUB_WORKSPACE/xcodebuild.log
           EXIT=${PIPESTATUS[0]}
           echo '---- Grep errors from xcodebuild.log ----'
@@ -128,7 +131,8 @@ jobs:
         run: |
           set -euo pipefail
           TEAM=${IOS_TEAM_ID}
-          BUNDLE=${BUNDLE_ID}
+          # Prefer the provisioning profile bundle id to avoid mismatch
+          BUNDLE=${PP_BUNDLE_ID:-$PROJECT_BUNDLE_ID}
           PROFILE=${PP_NAME:-$PP_UUID}
           PLIST=$RUNNER_TEMP/profile.plist
           if [ ! -f "$PLIST" ]; then
