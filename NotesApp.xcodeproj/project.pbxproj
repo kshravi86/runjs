@@ -16,7 +16,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		7A8B9C1D2E3F4567890ABCF2 /* NotesApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NotesApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7A8B9C1D2E3F4567890ABCF3 /* NotesApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NotesApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7A8B9C1D2E3F4567890ABCDF /* RunJSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunJSApp.swift; sourceTree = "<group>"; };
 		7A8B9C1D2E3F4567890ABCF0 /* JSEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSEngine.swift; sourceTree = "<group>"; };
 		7A8B9C1D2E3F4567890ABCE1 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -48,7 +48,7 @@
 		7A8B9C1D2E3F4567890ABCF7 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				7A8B9C1D2E3F4567890ABCF2 /* NotesApp.app */,
+				7A8B9C1D2E3F4567890ABCF3 /* NotesApp.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -90,7 +90,7 @@
 			);
 			name = "Run JS";
 			productName = "Run JS";
-			productReference = 7A8B9C1D2E3F4567890ABCF2 /* NotesApp.app */;
+			productReference = 7A8B9C1D2E3F4567890ABCF3 /* NotesApp.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
