@@ -16,7 +16,7 @@ jobs:
     runs-on: macos-latest
     env:
       IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
-      P12_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+      P12_BASE64: ${{ secrets.P12_BASE64 }}
       P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
       PROVISIONING_PROFILE_BASE64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
       SCHEME: Run JS
