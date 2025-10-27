@@ -1,0 +1,206 @@
+name: iOS IPA Build
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      export_method:
+        description: "Export method (app-store, release-testing, development, enterprise)"
+        required: false
+        default: "app-store-connect"
+
+jobs:
+  build-ipa:
+    runs-on: macos-latest
+    env:
+      IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+      P12_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+      P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+      PROVISIONING_PROFILE_BASE64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
+      SCHEME: Run-C
+      PROJECT: Run-C.xcodeproj
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify required signing secrets
+        run: |
+          set -euo pipefail
+          missing=()
+          for name in IOS_TEAM_ID P12_BASE64 P12_PASSWORD PROVISIONING_PROFILE_BASE64; do
+            if [ -z "${!name}" ]; then
+              missing+=("$name")
+            fi
+          done
+          if [ ${#missing[@]} -ne 0 ]; then
+            echo "::error title=Missing secrets::Provide values for: ${missing[*]}"
+            exit 1
+          fi
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+
+      - name: Import signing certificate
+        if: env.P12_BASE64 != ''
+        uses: apple-actions/import-codesign-certs@v2
+        with:
+          p12-file-base64: ${{ env.P12_BASE64 }}
+          p12-password: ${{ env.P12_PASSWORD }}
+
+      - name: Install provisioning profile
+        if: env.PROVISIONING_PROFILE_BASE64 != ''
+        run: |
+          set -e
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          PP_PATH=~/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
+          echo "$PROVISIONING_PROFILE_BASE64" | base64 --decode > "$PP_PATH"
+          security cms -D -i "$PP_PATH" > $RUNNER_TEMP/profile.plist
+          PP_UUID=$(/usr/libexec/PlistBuddy -c 'Print :UUID' $RUNNER_TEMP/profile.plist)
+          PP_NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' $RUNNER_TEMP/profile.plist)
+          APPID=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' $RUNNER_TEMP/profile.plist)
+          BUNDLE_ID=${APPID#*.}
+          echo "PP_UUID=$PP_UUID" >> $GITHUB_ENV
+          echo "PP_NAME=$PP_NAME" >> $GITHUB_ENV
+          echo "BUNDLE_ID=$BUNDLE_ID" >> $GITHUB_ENV
+          echo "Using provisioning profile: $PP_NAME ($PP_UUID) for $BUNDLE_ID"
+
+      - name: Detect bundle identifier
+        run: |
+          set -euo pipefail
+          BUNDLE_ID=$(xcodebuild -project "$PROJECT" -scheme "$SCHEME" -showBuildSettings \
+            | awk '/PRODUCT_BUNDLE_IDENTIFIER/ {print $3; exit}')
+          if [ -z "$BUNDLE_ID" ] || [ "$BUNDLE_ID" = "NO" ]; then
+            for INFO_PLIST_PATH in "Run-C/Info.plist" "Info.plist"; do
+              if [ -z "$BUNDLE_ID" ] || [ "$BUNDLE_ID" = "NO" ]; then
+                if [ -f "$INFO_PLIST_PATH" ]; then
+                  BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :ApplicationProperties:CFBundleIdentifier' "$INFO_PLIST_PATH" 2>/dev/null || true)
+                fi
+              fi
+            done
+          fi
+          if [ -z "$BUNDLE_ID" ]; then
+            echo "::error title=Bundle id missing::Could not determine PRODUCT_BUNDLE_IDENTIFIER"
+            exit 1
+          fi
+          echo "BUNDLE_ID=$BUNDLE_ID" >> "$GITHUB_ENV"
+          echo "Bundle identifier detected: $BUNDLE_ID"
+
+      - name: Resolve Swift packages
+        run: |
+          xcodebuild -resolvePackageDependencies -project "$PROJECT" -scheme "$SCHEME" -clonedSourcePackagesDirPath "$RUNNER_TEMP/SPM"
+
+      - name: Archive (Release)
+        run: |
+          set -o pipefail
+          PROFILE_SPECIFIER=${PP_NAME:-$PP_UUID}
+          xcodebuild -list -project "$PROJECT"
+          xcodebuild archive \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="$IOS_TEAM_ID" \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_SPECIFIER" \
+            2>&1 | tee $GITHUB_WORKSPACE/xcodebuild.log
+          EXIT=${PIPESTATUS[0]}
+          echo '---- Grep errors from xcodebuild.log ----'
+          grep -n -E -i 'error:|note:' $GITHUB_WORKSPACE/xcodebuild.log | tail -n 400 || true
+          echo '---- Tail of full xcodebuild.log ----'
+          tail -n 2000 $GITHUB_WORKSPACE/xcodebuild.log || true
+          exit $EXIT
+
+
+
+
+
+      - name: Create ExportOptions.plist (manual signing)
+        run: |
+          set -euo pipefail
+          TEAM=${IOS_TEAM_ID}
+          BUNDLE=${BUNDLE_ID}
+          PROFILE=${PP_NAME:-$PP_UUID}
+          PLIST=$RUNNER_TEMP/profile.plist
+          if [ ! -f "$PLIST" ]; then
+            echo "::error title=Provisioning profile missing::Install provisioning profile before exporting."
+            exit 1
+          fi
+          DETECTED_METHOD="app-store"
+          GET_TASK_ALLOW=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:get-task-allow' "$PLIST" 2>/dev/null || echo false)
+          HAS_DEVICES=false
+          if /usr/libexec/PlistBuddy -c 'Print :ProvisionedDevices' "$PLIST" >/dev/null 2>&1; then HAS_DEVICES=true; fi
+          IS_ENTERPRISE=$(/usr/libexec/PlistBuddy -c 'Print :ProvisionsAllDevices' "$PLIST" 2>/dev/null || echo false)
+          if [ "$GET_TASK_ALLOW" = "true" ]; then
+            DETECTED_METHOD="development"
+          elif [ "$IS_ENTERPRISE" = "true" ]; then
+            DETECTED_METHOD="enterprise"
+          elif [ "$HAS_DEVICES" = "true" ]; then
+            # Ad-hoc (Xcode 16+ name)
+            DETECTED_METHOD="release-testing"
+          else
+            DETECTED_METHOD="app-store"
+          fi
+          # Prefer detected method; only honor explicit input if provided and not deprecated
+          METHOD=$DETECTED_METHOD
+          if [ -n "${{ inputs.export_method }}" ]; then
+            USER_METHOD="${{ inputs.export_method }}"
+            if [ "$USER_METHOD" = "ad-hoc" ]; then USER_METHOD="release-testing"; fi
+            METHOD="$USER_METHOD"
+          fi
+          # Map deprecated value to the new one (Xcode 16+)
+          if [ "$METHOD" = "ad-hoc" ]; then METHOD="release-testing"; fi
+          echo "Using export method: $METHOD (detected: $DETECTED_METHOD)"
+          cat > ExportOptions.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>${METHOD}</string>
+            <key>teamID</key>
+            <string>${TEAM}</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>${BUNDLE}</key>
+              <string>${PROFILE}</string>
+            </dict>
+            <key>stripSwiftSymbols</key>
+            <true/>
+            <key>compileBitcode</key>
+            <false/>
+            <key>destination</key>
+            <string>export</string>
+          </dict>
+          </plist>
+          EOF
+
+      - name: Show ExportOptions for debugging
+        run: |
+          echo "ExportOptions.plist contents:"
+          plutil -p ExportOptions.plist || cat ExportOptions.plist
+
+      - name: Export IPA
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            -exportOptionsPlist ExportOptions.plist \
+            -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: iOS-IPA-${{ github.run_number }}
+          path: ${{ runner.temp }}/export/*.ipa
