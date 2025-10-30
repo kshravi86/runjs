@@ -42,6 +42,11 @@ struct ContentView: View {
             .navigationTitle("Run JS Interpreter")
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button("Reset") {
+                        print("[UI] Reset tapped: resetting JS context")
+                        engine.resetContext()
+                    }
+
                     Button("Clear") {
                         print("[UI] Clear tapped: clearing code and output")
                         codeInput = ""
