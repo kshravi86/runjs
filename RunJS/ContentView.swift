@@ -43,17 +43,22 @@ struct ContentView: View {
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     Button("Clear") {
+                        print("[UI] Clear tapped: clearing code and output")
                         codeInput = ""
                         engine.output = ""
                     }
                     
                     Button {
+                        print("[UI] Run tapped: executing code (\(codeInput.count) chars)")
                         engine.execute(code: codeInput)
                     } label: {
                         Label("Run", systemImage: "play.fill")
                     }
                     .buttonStyle(.borderedProminent)
                 }
+            }
+            .onAppear {
+                print("[UI] ContentView appeared")
             }
         }
     }
